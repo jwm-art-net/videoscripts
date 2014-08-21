@@ -1,0 +1,119 @@
+#!/bin/bash
+#
+# scroll text - scrolls text
+#   by james w. morris.
+#
+#   creates a video of text scrolling over moving stripes to
+#   give slight parallax effect.
+#
+#------------------------------------
+
+text="The quick brown fox jumped over the lazy dog"
+
+# text properties:
+TXTFONT="NewCenturySchlbk-BoldItalic"
+TXTSIZE="200"
+TXTFILLCOL="orange"
+TXTLINECOL="SaddleBrown"
+TXTSTROKE="8"
+
+# number of pixels to move text each frame
+STEP=4
+
+# output image dimensions:
+OW=640
+OH=480
+
+# output directory to render frames to:
+ODIR="out"
+
+# stripe properties:
+STRIPECOL1="CornflowerBlue"
+STRIPECOL2="LightSteelBlue4"
+STRIPEW=32
+
+# general background colour:
+BGCOL="MidnightBlue"
+
+# end of configurable options
+#------------------------------------
+
+function image_geometry
+{
+    IFS= set $(identify -format "%w %h" $1)
+    W=$1
+    H=$2
+}
+
+if [ -d $ODIR ]; then
+    echo "Output directory '$ODIR' exists. Abort."
+    exit
+fi
+
+mkdir -v $ODIR
+
+if [ ! -d $ODIR ]; then
+    echo "Failed to create output directory '$ODIR'. Abort."
+    exit
+fi
+
+convert -pointsize   $TXTSIZE       \
+        -font        $TXTFONT       \
+        -strokewidth $TXTSTROKE     \
+        -stroke      $TXTLINECOL    \
+        -fill        $TXTFILLCOL    \
+        -background none label:"${text}" \
+        \( +clone -shadow 70x8-24+24 \) +swap -composite \
+        text.png
+
+image_geometry text.png
+TW=$W
+TH=$H
+
+# make stripes...
+SW=$((STRIPEW*4))
+SH=$((TH*4))
+SH=$((SH/3))
+ASH=$((SH*3))
+ASH=$((ASH/4))
+SX1=$((STRIPEW*2))
+SX2=$((SX1+STRIPEW))
+convert -size ${SW}x${SH} xc:none \
+        -fill $STRIPECOL1 -draw "rectangle 0,0    $STRIPEW,$ASH" \
+        -fill $STRIPECOL2 -draw "rectangle $SX1,0 $SX2,$ASH" \
+        \( +clone -background black -shadow 70x10-32+32 \) +swap -composite \
+        stripe.png
+
+until [ $SW -gt $TW ]; do
+    convert stripe.png stripe.png +append stripe.png
+    image_geometry stripe.png
+    SW=$W
+done
+
+# create background
+convert -size "${OW}x${OH}" xc:$BGCOL bg.png
+
+N=0
+F=1
+S=0
+MAX=$((TW+OW))
+MAXFRAMES=$((MAX/STEP))
+SY=$((OH-SH))
+DY=$((SH-TH))
+DY=$((DY/2))
+TY=$((SY+DY))
+
+until [ $N -gt $MAX ]; do
+    echo Processing frame $F of $MAXFRAMES
+    OF=$(printf "%s/frame_%06d.jpg" $ODIR $F)
+    TX=$((OW-N))
+    SX=$((0-S))
+    convert bg.png \
+        stripe.png -geometry +$SX+$SY -composite \
+        text.png   -geometry +$TX+$TY -composite $OF
+    N=$((N+STEP))
+    F=$((F+1))
+    S=$((S+1))
+done
+
+ffmpeg  -i "$ODIR/frame_%06d.jpg" -r 30 -vcodec h264 scrolltext.mov
