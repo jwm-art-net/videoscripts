@@ -1,0 +1,205 @@
+#!/bin/bash
+
+. funcs_str
+
+# function gfx_img_geo
+#   returns geometry string of given image
+#   assigned to W, H, X, Y respectively
+
+function gfx_img_geo
+{
+    str_read_geo $(identify -format "%g" $1)
+}
+
+
+
+#------------------------------------------------------------------------------
+# function gfx_stripes
+#       renders an image of stripes
+#
+# arguments
+#   -c 1st colour
+#   -d 2nd colour
+#   -f filename for output image
+#   -h stripe height
+#   -r repeat stripes to produce final image of specified width*
+#   -s shadow (as imagemagick -shadow operator)
+#   -t add 2 transparent stripes
+#   -w stripe width
+#   -z shadow colour (if applicable)
+#
+#   *the width of the resulting image may have a different value to that
+#   specified by -r. this is because the image  width is an exact multiple
+#   of the number of stripes (2 or 4) times the stripe width. the default
+#   behaviour is to interpret the value of -r as a minimum value so that
+#   if the image width is just under the value of -r, one more set of stripes
+#   is appended for its width to exceed -r. however, a negative value can be
+#   specified to avoid this behaviour (it's absolute value will be used of course).
+#
+# examples:
+#
+#   gfx_stripes -c 'LightSkyBlue4' -d 'MistyRose4' \
+#               -w 8 -h 14 -r 64 -f neutralstripes.png
+#
+#   gfx_stripes -c 'firebrick1' -d 'OrangeRed1' \
+#               -w 2 -h 14 -r 32 -t -f hotstripes-trans.png
+#
+#   gfx_stripes -c 'RoyalBlue4' -d 'Blue' \
+#               -w 25 -h 120 -r 400 -t -s "100x24-32+32" -z "Black" \
+#               -f coolstripes-shadow.png
+
+function gfx_stripes
+{
+    local OC="Black"
+    local OD="White"
+    local OF="stripes.png"
+    local OH=2
+    local OR=""
+    local OS=""
+    local OT=""
+    local OW=1
+    local OZ=""
+
+    local RMIN=1
+    local OPTIND
+
+    while getopts "c:d:f:h:r:s:tw:z:" OPT; do
+        case "${OPT}" in
+            c) OC="${OPTARG}" ;;
+            d) OD="${OPTARG}" ;;
+            f) OF="${OPTARG}" ;;
+            h) OH="${OPTARG}" ;;
+            r) OR="${OPTARG}"
+                if [ $OR -lt 0 ]; then
+                    OR=$((-OR))
+                    RMIN=0
+                fi
+                ;;
+            s) OS="${OPTARG}" ;;
+            t) OT=1 ;;
+            w) OW="${OPTARG}" ;;
+            z) OZ="${OPTARG}" ;;
+            *) echo "$0:${FUNCNAME[0]}: Warning: unknown option: '${OPT}'" ;;
+        esac
+    done
+    shift $((OPTIND-1))
+
+#    echo "OC:'${OC}'"
+#    echo "OD:'${OD}'"
+#    echo "OF:'${OF}'"
+#    echo "OH:'${OH}'"
+#    echo "OR:'${OR}'"
+#    echo "OS:'${OS}'"
+#    echo "OT:'${OT}'"
+#    echo "OW:'${OW}'"
+#    echo "OZ:'${OZ}'"
+
+    local SW=$((OW*2))
+    local SX1=$OW
+    local SX2=$((OW*2))
+
+    if [ -n "$OT" ]; then
+        SW=$((SW*2))
+        SX1=$((SX1+OW))
+        SX2=$((SX2+OW))
+    elif [ -n "$OS" ]; then
+        echo "$0:${FUNCNAME[0]}: Warning: " \
+             "not rendering stripe shadows without transparent stripes."
+        OS=""
+    fi
+
+    if [ -n "$OS" ]; then
+        if [ -z "$OZ" ]; then
+            echo "$0:${FUNCNAME[0]}: Warning: " \
+                 "shadow colour unspecified, setting to black."
+            OZ="Black"
+        fi
+    fi
+
+    local TMPDIR=$(mktemp -d)
+    local TMP1="${TMPDIR}/tmp1.png"
+    local DW=$((OW-1))
+    local DSX2=$((SX2-1))
+
+    convert -size ${SW}x${OH} xc:none \
+        -fill $OC -draw "rectangle 0,0 $DW,$OH" \
+        -fill $OD -draw "rectangle $SX1,0 $DSX2,$OH" $TMP1
+
+    local TMPSHD="${TMPDIR}/tmpshd.png"
+    local TMPSHD1="${TMPDIR}/tmpshd1.png"
+    local TMPSHD3="${TMPDIR}/tmpshd3.png"
+    local PS
+
+    if [ -n "$OS" ]; then
+        if [ $((SW*3)) -lt $OR ]; then
+            convert $TMP1 $TMP1 $TMP1 +append  \
+                \( +clone -background $OZ -shadow $OS \) +swap \
+                -background none -layers merge +repage $TMPSHD
+            gfx_img_geo $TMPSHD
+            HH=$H
+            str_read_geo $OS
+            local ZX=$((H*2-X+SW))
+            local C1="${ZX}x${HH}+0+0"
+            local C2="${SW}x${HH}+${ZX}+0"
+            local C3="${SW}x${HH}+$((SW+ZX))+0"
+            convert $TMPSHD -crop $C1 $TMPSHD1
+            convert $TMPSHD -crop $C2 $TMP1
+            convert $TMPSHD -crop $C3 $TMPSHD3
+            OR=$((OR-SW*2))
+        else
+            # post shade as desired image width too small
+            PS=1
+        fi
+    fi
+
+    if [ -n "$OR" ]; then
+        local RD=$((OR/SW))
+        if [ $RD -lt 1 ]; then
+            echo "$0:${FUNCNAME[0]}: Warning: " \
+                 "image width specified with -r is too small for stripes."
+            RD=1;
+        fi
+        local B=$(echo "obase=2;$RD" | bc)
+        local P=${#B}
+        local TMP0="${TMPDIR}/tmp0.png"
+        local TMP2="${TMPDIR}/tmp2.png"
+        cp $TMP1 $TMP0
+        while [ $P -gt 0 ]; do
+            P=$((P-1))
+            if [ ${B:P:1} -gt 0 ]; then
+                if [ ! -e $TMP2 ]; then
+                    convert $TMP1 $TMP2
+                else
+                    convert $TMP1 $TMP2 +append $TMP2
+                fi
+            fi
+            convert $TMP1 $TMP1 +append $TMP1
+        done
+
+        if [ -n "$PS" ]; then # post shade
+            convert $TMP2 \
+                \( +clone -background $OZ -shadow $OS \) +swap \
+                -background none -layers merge +repage $TMP2
+        elif [ -n "$OS" ]; then
+            # if RMIN is above zero, then the value of R
+            # is the minimum image width, and a final single
+            # set of stripes may need to be appended to
+            # meet that requirement.
+            if [ $RMIN -gt 0 ]; then
+                echo "here we go..."
+                gfx_img_geo $TMP2
+                if [ $W -lt $OR ]; then
+                    convert $TMP0 $TMP2 +append $TMP2
+                fi
+            fi
+            convert $TMPSHD1 $TMP2 +append $TMP2
+            convert $TMP2 $TMPSHD3 +append $TMP2
+        fi
+    fi
+
+    if [ -e "$OF" ]; then
+        rm $OF
+    fi
+    cp $TMP2 $OF
+    rm -rf $TMPDIR
+}

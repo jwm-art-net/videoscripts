@@ -1,0 +1,43 @@
+#!/bin/bash
+
+
+# function: str_first_of_sign
+#   looks in string for first ocurrence of + or - characters
+#   and sets P to character position of discovery.
+#
+function str_first_of_sign
+{
+    unset P
+    local P1=$(expr index $1 "\+")
+    local P2=$(expr index $1 "-")
+    if [ $P1 -eq 0 -a $P2 -eq 0 ]; then return
+    elif [ $P1 -eq 0 ]; then    P=$P2
+    elif [ $P2 -eq 0 ]; then    P=$P1
+    elif [ $P1 -lt $P2 ]; then  P=$P1
+    else                        P=$P2
+    fi
+}
+
+# function: str_read_geo
+#   reads a geometry string (ie "320x240+8+16") and assigns each
+#   value (including sign) to W, H, X, Y respectively.
+#
+function str_read_geo
+{
+    unset W
+    unset H
+    unset X
+    unset Y
+    local S=$1
+    local P="$(expr index $S 'x')"
+    W="${S:0:$((P-1))}"
+    S="${S:P}"
+    str_first_of_sign $S
+    local XSIGN=${S:$((P-1)):1}
+    H="${S:0:$((P-1))}"
+    S="${S:P}"
+    str_first_of_sign $S
+    X="${XSIGN}${S:0:$((P-1))}"
+    Y="${S:$((P-1))}"
+}
+
