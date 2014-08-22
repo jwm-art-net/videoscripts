@@ -1,5 +1,11 @@
-Bash scripts for video processing
+Scripts for video processing
 
-Commonly utilizing FFmpeg and ImageMagick.
+Requirements:
+BASH
+FFmpeg
+ImageMagick
+BC
+
+
 
 

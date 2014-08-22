@@ -1,0 +1,128 @@
+#!/bin/bash
+
+function image_geometry
+{
+    IFS= set $(identify -format "%w %h" $1)
+    W=$1
+    H=$2
+}
+
+
+
+#------------------------------------------------------------------------------
+# function stripes
+#       renders an image of stripes
+#
+# arguments
+#   -c 1st colour
+#   -d 2nd colour
+#   -f filename for output image
+#   -h stripe height
+#   -r repeat stripes to produce final image of specified width*
+#   -t add 2 transparent stripes
+#   -w stripe width
+#
+#   *the width of the resulting image may have a different value to that
+#   specified by -r. this is because the image  width is an exact multiple
+#   of the number of stripes (2 or 4) times the stripe width. the default
+#   behaviour is to interpret the value of -r as a minimum value so that
+#   if the image width is just under the value of -r, one more set of stripes
+#   is appended for its width to exceed -r. however, a negative value can be
+#   specified to avoid this behaviour (it's absolute value will be used of course).
+#
+# examples:
+#
+#   stripes -c 'LightSkyBlue4' -d 'MistyRose4' -w 8 -h 14 -r 64 -f neutralstripes.png
+#   stripes -c 'firebrick1' -d 'OrangeRed1' -w 2 -h 14 -r 32 -t -f hotstripes-trans.png
+
+
+
+function stripes
+{
+    local C="Black"
+    local D="White"
+    local F="stripes.png"
+    local W=1
+    local H=2
+    local T=0
+    local R=8
+    local RMIN=1
+    local OPTIND
+
+    while getopts "c:d:f:h:r:tw:" o; do
+        case "${o}" in
+            c) C="${OPTARG}" ;;
+            d) D="${OPTARG}" ;;
+            f) F="${OPTARG}" ;;
+            h) H="${OPTARG}" ;;
+            r)
+                R="${OPTARG}"
+                if [ $R -lt 0 ]; then
+                    R=$((-R))
+                    RMIN=0
+                fi
+                ;;
+            t) T=1 ;;
+            w) W="${OPTARG}" ;;
+            *) echo "OTHER" ;;
+        esac
+    done
+    shift $((OPTIND-1))
+
+    local SW=$((W*2))
+    local SX1=$W
+    local SX2=$((W*2))
+
+    if [ $T -gt 0 ]; then
+        SW=$((SW*2))
+        SX1=$((SX1+W))
+        SX2=$((SX2+W))
+    fi
+
+    local TMPDIR=$(mktemp -d)
+    local TMP1="${TMPDIR}/tmp1.png"
+    local DW=$((W-1))
+    local DSX2=$((SX2-1))
+
+    convert -size ${SW}x${H} xc:none \
+        -fill $C -draw "rectangle 0,0 $DW,$H" \
+        -fill $D -draw "rectangle $SX1,0 $DSX2,$H" $TMP1
+
+    if [ $R -gt 0 ]; then
+        local RD=$((R/SW))
+        local B=$(echo "obase=2;$RD" | bc)
+        local P=${#B}
+        local TMP0="${TMPDIR}/tmp0.png"
+        local TMP2="${TMPDIR}/tmp2.png"
+        cp $TMP1 $TMP0
+        while [ $P -gt 0 ]; do
+            P=$((P-1))
+            if [ ${B:P:1} -gt 0 ]; then
+                if [ ! -e $TMP2 ]; then
+                    convert $TMP1 $TMP2
+                else
+                    convert $TMP1 $TMP2 +append $TMP2
+                fi
+            fi
+            convert $TMP1 $TMP1 +append $TMP1
+        done
+
+        # if RMIN is above zero, then the value of R
+        # is the minimum image width, and a final single
+        # set of stripes may need to be appended to
+        # meet that requirement.
+        if [ $RMIN -gt 0 ]; then
+            image_geometry $TMP2
+            if [ $W -lt $R ]; then
+                convert $TMP0 $TMP2 +append $TMP2
+            fi
+        fi
+    fi
+
+    if [ -e "$F" ]; then
+        rm $F
+    fi
+    cp $TMP2 $F
+    rm -rf $TMPDIR
+}
+
