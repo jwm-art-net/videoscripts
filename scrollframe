@@ -1,0 +1,156 @@
+#!/bin/bash
+#
+# scrollframe
+#
+. funcs_gfx
+
+FRAMES=10000
+
+# number of pixels to move images per frame
+STEP=3
+
+# output image dimensions:
+OW=1280
+OH=720
+ODIR="out"
+OUTNAME="out/frame-x-%06d.png"
+OY=100
+
+# input images name:
+IMGSNAME="vid/frame%06d_SCALED.png"
+BGS="vid/frame%06d.png"
+
+# input image scale to width:
+#ISCW=240
+TESTFRAME=$(printf $IMGSNAME 1)
+gfx_img_geo $TESTFRAME
+ISCW=$W
+
+# gap between input images (after scaling)
+GAP=16
+
+# general background colour:
+BGCOL="LightSkyBlue4"
+
+
+TOTW=$((ISCW+GAP))
+TOTOW=$((OW+TOTW))
+IMGLAST=$((TOTOW/TOTW))
+IMGCOUNT=$((IMGLAST+1))
+IXM=$IMGLAST
+IX=0
+OUTFRAME=1
+
+STRIPES="stripes.png"
+STRIPEX=$((OW+600))
+STRIPEY=106
+
+
+if [ ! -e $STRIPES ]; then
+    echo "Building stripes..."
+    gfx_stripes -c 'OliveDrab' -d 'bisque4' \
+               -w 26 -h 320 -r 6040 -t -u 44 -s "125x10+8+8" -z 'MidnightBlue' -f $STRIPES
+    echo done.
+fi
+
+
+gfx_img_geo $STRIPES
+
+STRIPEMINX=$((-W))
+STRIPESTEP=5
+TXTFN="text.png"
+
+if [ ! -e $TXTFN ]; then
+    echo "Rendering text..."
+    TXT=$(awk 1 ORS='    ' $0)
+    convert -pointsize   32                             \
+        -font        "Bitstream-Vera-Sans-Mono"  \
+        -fill        "IndianRed4"   \
+        -background none label:"${TXT}                        " \
+        \( +clone -background 'MidnightBlue' -shadow 100x2+6+6 \) \
+        +swap -composite $TXTFN
+fi
+
+gfx_img_geo $TXTFN
+TXTMINX=$((-W))
+TXTY=440
+TXTX=$((OW+1200))
+TXTSTEP=7
+
+declare -a IMGX
+declare -a IMGFN
+declare -a IMGF
+
+X=$OW
+for ((I=0; I<=IMGCOUNT; I++)); do
+    IMGX[I]=$X
+    J=$((I+1))
+    IMGF[I]=$(($J*IMGCOUNT))
+    echo IMGX[$I]=$X
+    X=$((X+TOTW))
+done
+
+IMG=1
+FIRSTRENDERFRAME=1
+
+while [ $TXTX -gt $TXTMINX ]
+do
+    echo -n "Rendering frame:$OUTFRAME ..."
+    I=0
+    STR=""
+    while [ $I -lt $IMGCOUNT ]; do
+        if [ ${IMGX[I]} -lt $OW ]; then
+            FN=$(printf $IMGSNAME ${IMGF[I]})
+            if [ ! -e $FN ]; then
+                IMGF[I] = 1;
+                FN=$(printf $IMGSNAME ${IMGF[I]})
+            fi
+            IMGF[I]=$((IMGF[I]+1))
+            STR="$STR -page +${IMGX[I]}+${OY} $FN"
+        fi
+        IMGX[I]=$((IMGX[I]-STEP))
+        I=$((I+1))
+    done
+
+    BGFN=$(printf $BGS $OUTFRAME)
+    OUTFN=$(printf $OUTNAME $OUTFRAME)
+
+    if [ $OUTFRAME -ge $FIRSTRENDERFRAME ]; then
+        convert -size ${OW}x${OH} xc:black $STR  \
+            -page +${STRIPEX}+${STRIPEY} $STRIPES \
+            -page +${TXTX}+${TXTY} $TXTFN -layers flatten $OUTFN
+        if [ $? -eq 0 ]; then
+            echo "ok."
+        else
+            echo "failed."
+        fi
+    else
+        echo "skipped ($OUTFRAME of $FIRSTRENDERFRAME)."
+    fi
+
+    STRIPEX=$((STRIPEX-STRIPESTEP))
+
+    if [ $STRIPEX -lt $STRIPEMINX ]; then
+        echo RESETTING STRIPES at frame $OUTFRAME
+        STRIPEX=$OW
+    fi
+
+    TXTX=$((TXTX-TXTSTEP))
+    if [ $TXTX -lt $TXTMINX ]; then
+        TXTX=$OW
+    fi
+
+    if [ $((TOTW+IMGX[IX])) -lt 0 ]; then
+        IMGX[IX]=$((IMGX[IXM]+TOTW))
+        echo "IMGX[IX:$IX]:${IMGX[IX]}"
+        echo "IMGX[IXM:$IXM]:${IMGX[IXM]}"
+        IXM=$IX
+        IX=$((IX+1))
+        if [ $IX -gt $IMGLAST ]; then
+            IX=0
+        fi
+    fi
+
+    OUTFRAME=$((OUTFRAME+1))
+done
+

@@ -8,3 +8,5 @@
 *.JPG
 *.PNG
 
+out/
+vid/

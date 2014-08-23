@@ -41,3 +41,24 @@ function str_read_geo
     Y="${S:$((P-1))}"
 }
 
+
+# function str_guess_ext
+#   guesses file extension by searching backwards from end
+#   of string for a dot
+#   sets P to position of dot
+#       EXT to extension (without dot)
+#
+function str_guess_ext
+{
+    local FN=$1
+    P=$((${#FN}-1))
+    while [ $P -gt 0 ]
+    do
+        if [ "${FN:P:1}" == "." ]; then
+            EXT="${FN:$((P+1))}"
+            return
+        fi
+        P=$((P-1))
+    done
+}
+

@@ -8,8 +8,53 @@
 
 function gfx_img_geo
 {
-    str_read_geo $(identify -format "%g" $1)
+    str_read_geo "$(identify -format "%G" $1)+0+0"
 }
+
+
+#------------------------------------------------------------------------------
+# function scale_frames
+#   scales stills from video, sequentially, in order, aborts on missing frame
+#   usage:
+#       scale_frames fileglob geometry startframe endframe
+#   example:
+#       scale_frames "vid/frame%05d.png" 1 1000
+
+function gfx_scale_frames
+{
+    local IMGS="$1"
+    local GEO="$2"
+    local F=$3
+    local LF=$4
+
+    str_guess_ext $IMGS
+    local BASEFP=${IMGS:0:P}
+    echo $BASEFP
+    
+    while [ $F -le $LF ];
+    do
+        local FP="$(printf "$BASEFP" $F)"
+        local FN="${FP}.${EXT}"
+        if [ ! -e  "$FN" ]; then
+            echo "Missing image '$FN' frame '$F'. Abort."
+            exit 1
+        fi
+        echo -n "$FN --> "
+        local SCFN="${FP}_SCALED.png"
+        echo -n "$SCFN: "
+
+        if [ ! -e $SCFN ]; then
+            convert -scale $GEO "$FN" "$SCFN"
+            if [ $? -eq 0 ]; then # did it work?
+                echo "Ok"
+            fi
+        else
+            echo "(exists)"
+        fi
+        F=$((F+1))
+    done
+}
+
 
 
 
@@ -57,13 +102,14 @@ function gfx_stripes
     local OR=""
     local OS=""
     local OT=""
+    local OU=""
     local OW=1
     local OZ=""
 
     local RMIN=1
     local OPTIND
 
-    while getopts "c:d:f:h:r:s:tw:z:" OPT; do
+    while getopts "c:d:f:h:r:s:tu:w:z:" OPT; do
         case "${OPT}" in
             c) OC="${OPTARG}" ;;
             d) OD="${OPTARG}" ;;
@@ -77,6 +123,7 @@ function gfx_stripes
                 ;;
             s) OS="${OPTARG}" ;;
             t) OT=1 ;;
+            u) OU="${OPTARG}" ;;
             w) OW="${OPTARG}" ;;
             z) OZ="${OPTARG}" ;;
             *) echo "$0:${FUNCNAME[0]}: Warning: unknown option: '${OPT}'" ;;
@@ -94,15 +141,7 @@ function gfx_stripes
 #    echo "OW:'${OW}'"
 #    echo "OZ:'${OZ}'"
 
-    local SW=$((OW*2))
-    local SX1=$OW
-    local SX2=$((OW*2))
-
-    if [ -n "$OT" ]; then
-        SW=$((SW*2))
-        SX1=$((SX1+OW))
-        SX2=$((SX2+OW))
-    elif [ -n "$OS" ]; then
+    if [ -z "$OT" -a -n "$OS" ]; then
         echo "$0:${FUNCNAME[0]}: Warning: " \
              "not rendering stripe shadows without transparent stripes."
         OS=""
@@ -114,6 +153,16 @@ function gfx_stripes
                  "shadow colour unspecified, setting to black."
             OZ="Black"
         fi
+    fi
+
+    local SW=$((OW*2))
+    local SX1=$OW
+    local SX2=$((OW*2))
+
+    if [ -n "$OT" ]; then
+        SW=$((SW+OU*2))
+        SX1=$((SX1+OU))
+        SX2=$((SX2+OU))
     fi
 
     local TMPDIR=$(mktemp -d)
@@ -141,13 +190,12 @@ function gfx_stripes
             local ZX=$((H*2-X+SW))
             local C1="${ZX}x${HH}+0+0"
             local C2="${SW}x${HH}+${ZX}+0"
-            local C3="${SW}x${HH}+$((SW+ZX))+0"
+            local C3="${ZX}x${HH}+$((SW+ZX))+0"
             convert $TMPSHD -crop $C1 $TMPSHD1
             convert $TMPSHD -crop $C2 $TMP1
             convert $TMPSHD -crop $C3 $TMPSHD3
             OR=$((OR-SW*2))
-        else
-            # post shade as desired image width too small
+        else # apply shade post render as desired image width too small
             PS=1
         fi
     fi
@@ -176,24 +224,25 @@ function gfx_stripes
             convert $TMP1 $TMP1 +append $TMP1
         done
 
-        if [ -n "$PS" ]; then # post shade
+        if [ -n "$PS" ]; then # apply shade post render
             convert $TMP2 \
                 \( +clone -background $OZ -shadow $OS \) +swap \
                 -background none -layers merge +repage $TMP2
-        elif [ -n "$OS" ]; then
+        else
             # if RMIN is above zero, then the value of R
             # is the minimum image width, and a final single
             # set of stripes may need to be appended to
             # meet that requirement.
             if [ $RMIN -gt 0 ]; then
-                echo "here we go..."
                 gfx_img_geo $TMP2
                 if [ $W -lt $OR ]; then
                     convert $TMP0 $TMP2 +append $TMP2
                 fi
             fi
-            convert $TMPSHD1 $TMP2 +append $TMP2
-            convert $TMP2 $TMPSHD3 +append $TMP2
+            if [ -n "$OS" ]; then
+                convert $TMPSHD1 $TMP2 +append $TMP2
+                convert $TMP2 $TMPSHD3 +append $TMP2
+            fi
         fi
     fi
 
@@ -203,3 +252,4 @@ function gfx_stripes
     cp $TMP2 $OF
     rm -rf $TMPDIR
 }
+

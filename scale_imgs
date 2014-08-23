@@ -1,0 +1,26 @@
+#!/bin/bash
+
+. funcs_gfx
+
+# example usage of gfx_scale_frames function,
+
+gfx_scale_frames "vid/frame%06d.png" "640x-1" 1 1000
+
+# the first argument is for auto generating filenames,
+#
+# filenames must be sequentially numbered, for the above example, they'll
+# be in the form:
+#
+#   vid/frame000001.png
+#   vid/frame000002.png
+#   vid/frame000003.png
+#       ...
+#   vid/frame000998.png
+#   vid/frame000999.png
+#   vid/frame001000.png
+
+# 2nd argument is geometry, Width x height, one of which can be negative
+# to maintain aspect ratio.
+#
+
+# 3rd and 4th arguments are the first and last frames to process, respectively.
