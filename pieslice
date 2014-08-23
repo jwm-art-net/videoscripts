@@ -1,0 +1,75 @@
+#!/bin/bash
+
+if [ ! -e polyseg ]; then
+    gcc polyseg.c -lm -o polyseg
+fi
+
+
+
+
+WH=300
+CX=150
+CY=$CX
+R=125
+
+SIDES=12
+
+
+SVG=$(./polyseg -s $SIDES -x $CX -y $CY -r $R --svg)
+
+convert -size ${WH}x${WH} xc:white -stroke black -fill red \
+    -draw "path '$SVG'" test.jpg
+
+
+
+
+
+
+
+
+
+
+# redundant/broken functions, retained for reference:
+exit
+
+
+function angle_ln # x, y angle, radius
+{
+    local X=$1
+    local Y=$2
+    local A=$3
+    local R=$4
+
+    echo "-------------------------"
+    echo "X:$X Y:$Y A:$A R:$R"
+
+    local STR1="scale=5;$X+s($A*0.017453293)*$R"
+    local STR2="scale=5;$Y+c($A*0.017453293)*$R"
+
+    PX=$(echo "$STR1" | bc -l)
+    PY=$(echo "$STR2" | bc -l)
+    echo "PX:$PX PY:$PY"
+
+}
+
+
+function path_triangle # x, y, angle 1, angle 2, radius
+{
+    local X=$1
+    local Y=$2
+    local A1=$3
+    local A2=$4
+    local R=$5
+
+    echo "X:$X Y:$Y A1:$A1 A2:$A2 R:$R"
+
+    angle_ln $X $Y $A1 $R
+    PX1=$PX
+    PY1=$PY
+
+    angle_ln $X $Y $A2 $R
+    PX2=$PX
+    PY2=$PY
+
+    STR="M $X,$Y L $PX1,$PY1 L $PX2,$PY2"
+}
