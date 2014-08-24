@@ -5,28 +5,64 @@ if [ ! -e polyseg ]; then
 fi
 
 
-
-
-WH=300
-CX=150
+WH=720
+CX=360
 CY=$CX
-R=125
+R=350
 
-SIDES=12
+SIDES=6
+ROTDELTA=$(echo "scale=5;360/$SIDES" | bc)
+ROT=0
 
+FRAME=1
+MAXFRAMES=5892
+FIRST=421
 
-SVG=$(./polyseg -s $SIDES -x $CX -y $CY -r $R --svg)
+while [ $FRAME -lt $MAXFRAMES ]
+do
+    echo -n "Rendering frame $FRAME ..."
+    if [ $FRAME -ge $FIRST ]; then
+        SVG=$(./polyseg -s $SIDES -x $CX -y $CY -r $R --svg -R $ROT)
+        MASK=$(printf "out/mask-%04d.png" $FRAME)
+        SEG=$(printf "out/seg-%04d.png" $FRAME)
+        OUT=$(printf "out/frame-%04d.png" $FRAME)
+        IN=$(printf "vid/frame%06d.png" $FRAME)
 
-convert -size ${WH}x${WH} xc:white -stroke black -fill red \
-    -draw "path '$SVG'" test.jpg
+        convert -size ${WH}x${WH} xc:black -stroke grey -fill white \
+                -draw "path '$SVG'" -alpha copy $MASK
 
+        convert -size ${WH}x${WH} xc:none -page +640+360 $IN  \
+                $MASK -compose Screen -composite $SEG
 
+        I=0;
+        STR="-page +0+0 $SEG"
+        RA=$ROTDELTA
+        while [ $I -lt $((SIDES-1)) ];
+        do
+            FN=$(printf "rot$I.png")
+            convert $SEG \( +clone -background none -rotate $RA \) \
+                -gravity center -compose Src -composite $FN
+            STR="$STR -page +0+0 $FN"
+            RA=$(echo "scale=5;${RA}+${ROTDELTA}" | bc)
+            I=$((I+1))
+        done
 
+        convert -size ${WH}x${WH} xc:black $STR -flatten $OUT
+        if [ $? ]; then
+            echo "Ok"
+        else
+            echo "FAIL"
+        fi
+    else
+        echo "skipped"
+    fi
 
-
-
-
-
+    FRAME=$((FRAME+1))
+    ROT=$((ROT+1))
+    if [ $ROT -ge 360 ]; then
+        ROT=$((ROT-360))
+    fi
+done
 
 
 # redundant/broken functions, retained for reference:
