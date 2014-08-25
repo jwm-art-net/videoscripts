@@ -4,7 +4,10 @@
 
 # example usage of gfx_scale_frames function,
 
-gfx_scale_frames "vid/frame%06d.png" "640x-1" 1 1000
+FIRSTFRAME=1000
+LASTFRAME=2500
+
+gfx_scale_frames "vid/frame%06d.png" "960x-1" $FIRSTFRAME $LASTFRAME
 
 # the first argument is for auto generating filenames,
 #

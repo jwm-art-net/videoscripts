@@ -9,6 +9,11 @@ polyseg
 *.MOV
 *.JPG
 *.PNG
+*.mp3
+*.wav
+*.flac
+*.ogg
+*.mp4
 
 out/
 vid/

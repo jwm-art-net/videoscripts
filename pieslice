@@ -4,50 +4,65 @@ if [ ! -e polyseg ]; then
     gcc polyseg.c -lm -o polyseg
 fi
 
+# example output:
+#   'sq sq sq sq' http://youtu.be/n9KXPlfdo_s
 
 WH=720
 CX=360
+GEO=${WH}x${WH}
 CY=$CX
-R=350
+R=300
 
-SIDES=6
+SIDES=4
 ROTDELTA=$(echo "scale=5;360/$SIDES" | bc)
 ROT=0
 
 FRAME=1
-MAXFRAMES=5892
-FIRST=421
+MAXFRAMES=2500
+FIRST=1
 
-while [ $FRAME -lt $MAXFRAMES ]
+while [ $FRAME -le $MAXFRAMES ]
 do
     echo -n "Rendering frame $FRAME ..."
     if [ $FRAME -ge $FIRST ]; then
-        SVG=$(./polyseg -s $SIDES -x $CX -y $CY -r $R --svg -R $ROT)
+        SVG=$(./polyseg -s $SIDES -x $CX -y $CY -r $R -R $ROT --svg)
         MASK=$(printf "out/mask-%04d.png" $FRAME)
         SEG=$(printf "out/seg-%04d.png" $FRAME)
         OUT=$(printf "out/frame-%04d.png" $FRAME)
-        IN=$(printf "vid/frame%06d.png" $FRAME)
+        IN=$(printf "vid/frame%06d_SCALED.png" $FRAME)
 
-        convert -size ${WH}x${WH} xc:black -stroke grey -fill white \
+        convert -size $GEO xc:black -stroke grey -fill white \
                 -draw "path '$SVG'" -alpha copy $MASK
 
-        convert -size ${WH}x${WH} xc:none -page +640+360 $IN  \
+        convert -size $GEO xc:transparent -page +640+360 $IN \
                 $MASK -compose Screen -composite $SEG
 
-        I=0;
-        STR="-page +0+0 $SEG"
-        RA=$ROTDELTA
-        while [ $I -lt $((SIDES-1)) ];
+        I=0
+        RA=0
+        STR=""
+        while [ $I -lt $SIDES ];
         do
-            FN=$(printf "rot$I.png")
-            convert $SEG \( +clone -background none -rotate $RA \) \
-                -gravity center -compose Src -composite $FN
-            STR="$STR -page +0+0 $FN"
-            RA=$(echo "scale=5;${RA}+${ROTDELTA}" | bc)
+            FN=$(printf "out/rot%02d.png" $I)
+            FNb=$(printf "out/rot%02db.png" $I)
+            RD=$(echo "scale=5; 0 - ${RA}" | bc)
+
+            convert -size $GEO \
+                    $SEG \( +clone -background transparent -rotate $RD \) \
+                    -gravity Center -compose Src -composite $FN
+
+            C=($(./polyseg -s $SIDES -r $R -R $RA --int --opposite))
+
+            convert -size $GEO $FN \
+                    $FN -geometry +${C[2]}+${C[3]} -composite $FNb
+
+            STR="$STR -page +0+0 $FNb "
+
+            RA=$(echo "scale=5;${RA} + ${ROTDELTA}" | bc)
             I=$((I+1))
         done
 
-        convert -size ${WH}x${WH} xc:black $STR -flatten $OUT
+        convert -size $GEO xc:black $STR  -flatten $OUT
+
         if [ $? ]; then
             echo "Ok"
         else
@@ -64,48 +79,3 @@ do
     fi
 done
 
-
-# redundant/broken functions, retained for reference:
-exit
-
-
-function angle_ln # x, y angle, radius
-{
-    local X=$1
-    local Y=$2
-    local A=$3
-    local R=$4
-
-    echo "-------------------------"
-    echo "X:$X Y:$Y A:$A R:$R"
-
-    local STR1="scale=5;$X+s($A*0.017453293)*$R"
-    local STR2="scale=5;$Y+c($A*0.017453293)*$R"
-
-    PX=$(echo "$STR1" | bc -l)
-    PY=$(echo "$STR2" | bc -l)
-    echo "PX:$PX PY:$PY"
-
-}
-
-
-function path_triangle # x, y, angle 1, angle 2, radius
-{
-    local X=$1
-    local Y=$2
-    local A1=$3
-    local A2=$4
-    local R=$5
-
-    echo "X:$X Y:$Y A1:$A1 A2:$A2 R:$R"
-
-    angle_ln $X $Y $A1 $R
-    PX1=$PX
-    PY1=$PY
-
-    angle_ln $X $Y $A2 $R
-    PX2=$PX
-    PY2=$PY
-
-    STR="M $X,$Y L $PX1,$PY1 L $PX2,$PY2"
-}
